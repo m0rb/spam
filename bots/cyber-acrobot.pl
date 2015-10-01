@@ -41,6 +41,7 @@ sub zero {
 
     if ( rand(100) > 60 ) { $msg =~ y/!-~/\x{ff01}-\x{ff5e}/; }
     print "Posting: $msg";
+    $msg =~ s/\s/\n/g;
     $SIG{ALRM} = \&derped;
     eval { alarm(10); $nt->update( { status => $msg } ) and alarm(0); }
       and print " OK!\n"
