@@ -52,48 +52,53 @@ my $stream = AnyEvent::Twitter::Stream->new(
     method          => "filter",
     follow          => 2436389418,
     on_tweet        => sub {
-        my $t   = shift;
-        my $sn  = $t->{user}->{screen_name};
-        my $tid = $t->{id};
-        my $msg = $t->{text} or return 1;
-        my $taco = $t->{entities}->{media}->[0]->{url};
+        my $t     = shift;
+        my $sn    = $t->{user}->{screen_name};
+        my $tid   = $t->{id};
+        my $msg   = $t->{text} or return 1;
+        my $taco  = $t->{entities}->{media}->[0]->{url};
         my $media = $t->{entities}->{media}->[0]->{media_url};
         if ( $sn eq "SwiftOnSecurity" ) {
             print "$tid: <$sn> $msg\n";
-            if ( $taco ) { $msg =~ s/$taco//g; };
+            if ($taco) { $msg =~ s/$taco//g; }
             push @swifttweets, ( $tid . $msg )
               and store( \@swifttweets, $tweets );
-           if ( $media ) {
-              my $ua = LWP::UserAgent->new;
-              my $req = HTTP::Request->new(GET => $media);
-              my $resp = $ua->request($req);
-              if ( $resp->is_success ) {
-                 open IMG, ">/tmp/${tid}.jpg" or die "$!";
-                 binmode IMG;
-                 print IMG $ua->request($req)->content;
-                 close IMG;
-              }
-           }
+            if ($media) {
+                my $ua   = LWP::UserAgent->new;
+                my $req  = HTTP::Request->new( GET => $media );
+                my $resp = $ua->request($req);
+                if ( $resp->is_success ) {
+                    open( IMG, ">/tmp/${tid}.jpg" ) or die "$!";
+                    binmode(IMG);
+                    print IMG $ua->request($req)->content;
+                    close(IMG);
+                }
+            }
         }
     },
     on_delete => sub {
         my ( $tid, $uid ) = @_;
         my $file = "/tmp/${tid}.jpg";
-        print "Delete: $tid by $uid\n";
         my @swiftsort = grep { /$tid/ } @swifttweets;
         if (@swiftsort) {
             my ($output) = @swiftsort;
             $output =~ s/$tid//g;
             print colored( "<TayBot> $output\n", 'red' );
             if ( -e $file ) {
-               open (IMG, $file);
-               my $rawdog = do{ local $/ = undef; <IMG>; };
-               my $enc = encode_base64( $rawdog );
-               close (IMG);
-               my $upload = $nt->upload({ media => $enc }) or die "ffffff $@\n";
-               eval { $nt->update({ status => $output, media_ids => $upload->{media_id} }); };
-            } else {
-               eval { $nt->update({ status => "$output"}); };
+                open( IMG, $file );
+                my $rawdog = do { local $/ = undef; <IMG>; };
+                my $enc = encode_base64($rawdog);
+                close(IMG);
+                my $upload = $nt->upload( { media => $enc } )
+                  or die "$@\n"; 
+                eval {
+                    $nt->update(
+                        { status => $output, media_ids => $upload->{media_id} }
+                    );
+                };
+            }
+            else {
+                eval { $nt->update( { status => "$output" } ); };
             }
         }
     },
