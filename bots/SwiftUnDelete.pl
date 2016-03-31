@@ -78,7 +78,7 @@ my $stream = AnyEvent::Twitter::Stream->new(
         }
     },
     on_delete => sub {
-        my ( $tid, $uid ) = @_; my $mid = 0;
+        my ( $tid, $uid ) = @_; my $mid;
         my $fn = "${imgdir}/${tid}";
         my @swiftsort = grep { /$tid/ } @swifttweets;
         if (@swiftsort) {
@@ -92,7 +92,7 @@ my $stream = AnyEvent::Twitter::Stream->new(
                 $mid = &chunklet( "image/jpeg", "${fn}.jpg" );
             }
             my $update = { status => $output };
-            if ( $mid > 0 ) { $update .= { media_ids => $mid }; }
+            if ( $mid ) { $update .= { media_ids => $mid }; }
             eval { $nt->update( $update ); };
         }
     },
