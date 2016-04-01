@@ -92,7 +92,7 @@ my $stream = AnyEvent::Twitter::Stream->new(
                 $mid = &chunklet( "image/jpeg", "${fn}.jpg" );
             }
             my $update = { status => $output };
-            if ( $mid ) { $update .= { media_ids => $mid }; }
+            if ( $mid ) { $update->{media_ids} = $mid; }; 
             eval { $nt->update( $update ); };
         }
     },
