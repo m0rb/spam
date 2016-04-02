@@ -53,8 +53,6 @@ my $stream = AnyEvent::Twitter::Stream->new(
     token           => $at,
     token_secret    => $asec,
     method          => "filter",
-
-    #    method         => "user",
     follow   => 2436389418,
     on_tweet => sub {
         my $t     = shift;
