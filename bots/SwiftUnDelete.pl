@@ -10,7 +10,9 @@ use 5.10.1;
 use warnings;
 use strict;
 use utf8;
-use Storable;
+use File::Slurp;
+use Sereal::Decoder;
+use Sereal::Encoder;
 use Net::Twitter;
 use AnyEvent::Twitter::Stream;
 use Term::ANSIColor;
@@ -26,14 +28,14 @@ my $csec = $settings->val( 'twitter', 'csec' ) or die "no consumer secret";
 my $at   = $settings->val( 'twitter', 'at' )   or die;
 my $asec = $settings->val( 'twitter', 'asec' ) or die;
 ################################################################
-my $tweets = "swift.tweets";
-my $imgdir = "/tmp";
-my @swifttweets;
-eval {
-    @swifttweets = @{ retrieve($tweets) };
-    my $tweetcount = ( scalar @swifttweets );
-    print colored( "[!] backlog loaded ($tweetcount)\n", 'green' );
-} or @swifttweets = ();
+my $enc        = Sereal::Encoder->new( { compress => 1 } );
+my $dec        = Sereal::Decoder->new();
+my $hashfile   = "swift.sereal";
+my $twet       = read_file($hashfile);
+my $imgdir     = "/tmp";
+my $tweets     = $dec->decode($twet) || ();
+my $tweetcount = keys(%$tweets);
+print colored( "[!] backlog loaded ($tweetcount)\n", 'green' );
 my $nt = Net::Twitter->new(
     traits               => [qw/API::RESTv1_1/],
     consumer_key         => $ckey,
@@ -51,8 +53,10 @@ my $stream = AnyEvent::Twitter::Stream->new(
     token           => $at,
     token_secret    => $asec,
     method          => "filter",
-    follow          => 2436389418,
-    on_tweet        => sub {
+
+    #    method         => "user",
+    follow   => 2436389418,
+    on_tweet => sub {
         my $t     = shift;
         my $sn    = $t->{user}->{screen_name};
         my $tid   = $t->{id};
@@ -62,61 +66,56 @@ my $stream = AnyEvent::Twitter::Stream->new(
         my $vid =
           $t->{extended_entities}{media}[0]{video_info}{variants}[0]{url};
         if ( $sn eq "SwiftOnSecurity" ) {
-            print "$tid: <$sn> $msg\n";
+            print "$tid: <$sn> $msg ";
             if ($taco) { $msg =~ s/$taco//g; }
-            push @swifttweets, ( $tid . $msg )
-              and store( \@swifttweets, $tweets );
+            $tweets->{$tid}->{text} = $msg;
             if ($vid) {
-                print "fetching video\n";
-                &fetch( $vid, "${imgdir}/${tid}.mp4" );
+                $tweets->{$tid}->{video} =
+                  &fetch( $vid, "${imgdir}/${tid}.mp4" );
             }
             elsif ($media) {
-                print "fetching jpeg\n";
-                &fetch( $media, "${imgdir}/${tid}.jpg" );
+                $tweets->{$tid}->{jpeg} =
+                  &fetch( $media, "${imgdir}/${tid}.jpg" );
             }
+            my $tash = $enc->encode($tweets);
+            write_file( $hashfile, $tash );
 
         }
     },
     on_delete => sub {
-        my ( $tid, $uid ) = @_; my $mid;
-        my $fn = "${imgdir}/${tid}";
-        my @swiftsort = grep { /$tid/ } @swifttweets;
-        if (@swiftsort) {
-            my ($output) = @swiftsort;
-            $output =~ s/$tid//g;
+        my ( $tid, $uid ) = @_;
+        my $mid;
+        if ( my $output = $tweets->{$tid}->{text} ) {
             print colored( "<TayBot> $output\n", 'red' );
-            if ( -e "${fn}.mp4" ) {
-                $mid = &chunklet( "video/mp4", "${fn}.mp4" );
+            if ( $tweets->{$tid}->{video} ) {
+                $mid = &chunklet( "video/mp4", $tweets->{$tid}->{video} );
             }
-            elsif ( -e "${fn}.jpg" ) {
-                $mid = &chunklet( "image/jpeg", "${fn}.jpg" );
+            elsif ( $tweets->{$tid}->{jpeg} ) {
+                $mid = &chunklet( "image/jpeg", $tweets->{$tid}->{jpeg} );
             }
             my $update = { status => $output };
-            if ( $mid ) { $update->{media_ids} = $mid; }; 
-            eval { $nt->update( $update ); };
+            if ($mid) { $update->{media_ids} = $mid; }
+            eval { $nt->update($update); };
         }
     },
 );
 $derp->recv;
 
 sub fetch {
-    my ( $media, $filename ) = @_;
+    my ( $media, $fn ) = @_;
     my $ua   = LWP::UserAgent->new;
     my $req  = HTTP::Request->new( GET => $media );
     my $resp = $ua->request($req);
     if ( $resp->is_success ) {
-        open F, ">${filename}" or die "$!";
-        binmode F;
-        print F $ua->request($req)->content;
-        close F;
+        write_file( $fn, $ua->request($req)->content ) and return ($fn);
     }
 }
 
 sub chunklet {
     die unless $nt->authorized;
     my ( $mt, $fn ) = @_;
-    my $fs = -s $fn;
-    my $si = 0;
+    my $fs   = -s $fn;
+    my $si   = 0;
     my $init = $nt->upload(
         { command => 'INIT', media_type => $mt, total_bytes => $fs } )
       or die $@;
@@ -142,7 +141,7 @@ sub chunklet {
         };
         $si += 1;
     }
-    $nt->upload( { command => 'FINALIZE', media_id => $media_id } );
     close(IMAGE);
+    $nt->upload( { command => 'FINALIZE', media_id => $media_id } );
     return ($media_id);
 }
