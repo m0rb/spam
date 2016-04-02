@@ -64,7 +64,7 @@ my $stream = AnyEvent::Twitter::Stream->new(
         my $vid =
           $t->{extended_entities}{media}[0]{video_info}{variants}[0]{url};
         if ( $sn eq "SwiftOnSecurity" ) {
-            print "$tid: <$sn> $msg ";
+            print "$tid: <$sn> $msg\n";
             if ($taco) { $msg =~ s/$taco//g; }
             $tweets->{$tid}->{text} = $msg;
             if ($vid) {
