@@ -53,8 +53,8 @@ my $stream = AnyEvent::Twitter::Stream->new(
     token           => $at,
     token_secret    => $asec,
     method          => "filter",
-    follow   => 2436389418,
-    on_tweet => sub {
+    follow          => 2436389418,
+    on_tweet        => sub {
         my $t     = shift;
         my $sn    = $t->{user}->{screen_name};
         my $tid   = $t->{id};
@@ -68,12 +68,12 @@ my $stream = AnyEvent::Twitter::Stream->new(
             if ($taco) { $msg =~ s/$taco//g; }
             $tweets->{$tid}->{text} = $msg;
             if ($vid) {
-                $tweets->{$tid}->{video} =
-                  &fetch( $vid, "${imgdir}/${tid}.mp4" );
+                ( $tweets->{$tid}->{video}, $tweets->{$tid}->{alt} ) =
+                  &fetch( $tid, $vid, "${imgdir}/${tid}.mp4" );
             }
             elsif ($media) {
-                $tweets->{$tid}->{jpeg} =
-                  &fetch( $media, "${imgdir}/${tid}.jpg" );
+                ( $tweets->{$tid}->{jpeg}, $tweets->{$tid}->{alt} ) =
+                  &fetch( $tid, $media, "${imgdir}/${tid}.jpg" );
             }
             my $tash = $enc->encode($tweets);
             write_file( $hashfile, $tash );
@@ -86,10 +86,18 @@ my $stream = AnyEvent::Twitter::Stream->new(
         if ( my $output = $tweets->{$tid}->{text} ) {
             print colored( "<TayBot> $output\n", 'red' );
             if ( $tweets->{$tid}->{video} ) {
-                $mid = &chunklet( "video/mp4", $tweets->{$tid}->{video} );
+                $mid = &chunklet(
+                    "video/mp4",
+                    $tweets->{$tid}->{video},
+                    $tweets->{$tid}->{alt}
+                );
             }
             elsif ( $tweets->{$tid}->{jpeg} ) {
-                $mid = &chunklet( "image/jpeg", $tweets->{$tid}->{jpeg} );
+                $mid = &chunklet(
+                    "image/jpeg",
+                    $tweets->{$tid}->{jpeg},
+                    $tweets->{$tid}->{alt}
+                );
             }
             my $update = { status => $output };
             if ($mid) { $update->{media_ids} = $mid; }
@@ -100,18 +108,31 @@ my $stream = AnyEvent::Twitter::Stream->new(
 $derp->recv;
 
 sub fetch {
-    my ( $media, $fn ) = @_;
+    my ( $tid, $media, $fn ) = @_;
     my $ua   = LWP::UserAgent->new;
     my $req  = HTTP::Request->new( GET => $media );
     my $resp = $ua->request($req);
     if ( $resp->is_success ) {
-        write_file( $fn, $ua->request($req)->content ) and return ($fn);
+        write_file( $fn, $ua->request($req)->content );
+    }
+    my $alt = $nt->show_status(
+        {
+            id                   => $tid,
+            include_entities     => 'true',
+            include_ext_alt_text => 'true'
+        }
+    );
+    if ( my $alt_text = $alt->{extended_entities}{media}[0]{ext_alt_text} ) {
+        return ( $fn, $alt_text );
+    }
+    else {
+        return ( $fn, undef );
     }
 }
 
 sub chunklet {
     die unless $nt->authorized;
-    my ( $mt, $fn ) = @_;
+    my ( $mt, $fn, $md ) = @_;
     my $fs   = -s $fn;
     my $si   = 0;
     my $init = $nt->upload(
@@ -141,5 +162,10 @@ sub chunklet {
     }
     close(IMAGE);
     $nt->upload( { command => 'FINALIZE', media_id => $media_id } );
+    if ($md) {
+        $nt->create_media_metadata(
+            { media_id => $media_id, alt_text => { text => $md } } );
+    }
+
     return ($media_id);
 }
