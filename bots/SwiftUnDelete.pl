@@ -19,6 +19,7 @@ use Term::ANSIColor;
 use Config::IniFiles;
 use MIME::Base64;
 use LWP::UserAgent;
+use HTML::Entities;
 binmode( STDOUT, ":utf8" );
 ################################################################
 my $settings = Config::IniFiles->new( -file => "swift.ini" )
@@ -64,6 +65,7 @@ my $stream = AnyEvent::Twitter::Stream->new(
         my $vid =
           $t->{extended_entities}{media}[0]{video_info}{variants}[0]{url};
         if ( $sn eq "SwiftOnSecurity" ) {
+	    decode_entities($msg);
             print "$tid: <$sn> $msg\n";
             if ($taco) { $msg =~ s/$taco//g; }
             $tweets->{$tid}->{text} = $msg;
