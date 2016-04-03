@@ -83,23 +83,23 @@ my $stream = AnyEvent::Twitter::Stream->new(
     on_delete => sub {
         my ( $tid, $uid ) = @_;
         my $mid;
-        if ( my $output = $tweets->{$tid}->{text} ) {
-            print colored( "<TayBot> $output\n", 'red' );
-            if ( $tweets->{$tid}->{video} ) {
+        if ( my $output = $tweets->{$tid} ) {
+            print colored( "<TayBot> $output->{text}\n", 'red' );
+            if ( $output->{video} ) {
                 $mid = &chunklet(
                     "video/mp4",
-                    $tweets->{$tid}->{video},
-                    $tweets->{$tid}->{alt}
+                    $output->{video},
+                    $output->{alt}
                 );
             }
-            elsif ( $tweets->{$tid}->{jpeg} ) {
+            elsif ( $output->{jpeg} ) {
                 $mid = &chunklet(
                     "image/jpeg",
-                    $tweets->{$tid}->{jpeg},
-                    $tweets->{$tid}->{alt}
+                    $output->{jpeg},
+                    $output->{alt}
                 );
             }
-            my $update = { status => $output };
+            my $update = { status => $output->{text} };
             if ($mid) { $update->{media_ids} = $mid; }
             eval { $nt->update($update); };
         }
