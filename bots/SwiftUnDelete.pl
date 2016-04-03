@@ -60,15 +60,20 @@ my $stream = AnyEvent::Twitter::Stream->new(
         my $sn    = $t->{user}->{screen_name};
         my $tid   = $t->{id};
         my $msg   = $t->{text} or return 1;
+        my $irt   = $t->{in_reply_to_status_id};
         my $taco  = $t->{entities}->{media}->[0]->{url};
         my $media = $t->{entities}->{media}->[0]->{media_url};
         my $vid =
           $t->{extended_entities}{media}[0]{video_info}{variants}[0]{url};
+
         if ( $sn eq "SwiftOnSecurity" ) {
-	    decode_entities($msg);
+            decode_entities($msg);
             print "$tid: <$sn> $msg\n";
             if ($taco) { $msg =~ s/$taco//g; }
             $tweets->{$tid}->{text} = $msg;
+            if ($irt) {
+                $tweets->{$tid}->{reply} = $irt;
+            }
             if ($vid) {
                 ( $tweets->{$tid}->{video}, $tweets->{$tid}->{alt} ) =
                   &fetch( $tid, $vid, "${imgdir}/${tid}.mp4" );
@@ -88,20 +93,17 @@ my $stream = AnyEvent::Twitter::Stream->new(
         if ( my $output = $tweets->{$tid} ) {
             print colored( "<TayBot> $output->{text}\n", 'red' );
             if ( $output->{video} ) {
-                $mid = &chunklet(
-                    "video/mp4",
-                    $output->{video},
-                    $output->{alt}
-                );
+                $mid =
+                  &chunklet( "video/mp4", $output->{video}, $output->{alt} );
             }
             elsif ( $output->{jpeg} ) {
-                $mid = &chunklet(
-                    "image/jpeg",
-                    $output->{jpeg},
-                    $output->{alt}
-                );
+                $mid =
+                  &chunklet( "image/jpeg", $output->{jpeg}, $output->{alt} );
             }
             my $update = { status => $output->{text} };
+            if ( $output->{reply} ) {
+                $update->{in_reply_to_status_id} = $output->{reply};
+            }
             if ($mid) { $update->{media_ids} = $mid; }
             eval { $nt->update($update); };
         }
